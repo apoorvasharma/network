@@ -1,4 +1,6 @@
-
+/*
+Queue Implementation for deferring messages while unlocking
+*/
 struct node_ 
 {
 	int data;

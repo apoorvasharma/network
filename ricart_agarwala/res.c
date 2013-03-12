@@ -1,3 +1,10 @@
+/*
+Server, acts as a Critical Resource
+Waits for a connection repeatedly , and once connected writes all messages to 
+a file
+*/
+
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <stdio.h>
@@ -20,7 +27,7 @@ void int_handle(int x)
 	fclose(file);
 	printf("Process Exiting\n");
 	exit(0);
-	//
+	
 }
 
 
@@ -61,14 +68,12 @@ int main(int argc, char **argv)
 					close(connfd);
 					break;
 				}
-				//printf("status %d error %d\n",status,errno);
-
 				
 				printf("Writing : %s\n",buff);
 				fprintf(file,"%s",buff);
 				
 
-        		//write(connfd, buff, strlen(buff)+1);
+
 
 			
 			}

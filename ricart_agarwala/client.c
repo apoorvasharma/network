@@ -1,3 +1,10 @@
+/*
+Client Program
+Gets own device number through commandline and accesses resourced through 
+acquires reource by calling ra_lock, sends data to server, waits for specifed
+seconds and releases resource with ra_unlock
+See client.h for function descriptions
+*/
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -19,39 +26,32 @@
 
 void main(int argc,char** argv)
 {
-	struct timeval tv;
-	tv.tv_sec = 1;
-	
+
+	char str[MSG_LEN];
 	int SELF = atoi(argv[1]);
+
+	/*array to hold file-descriptors of other devices*/
 	int devices[N] = {0};
-	int listen;
-	int i;
+
+
+	/*arrays to hold addresses and port numbers of other devices*/
 	char address[N][ADD_LEN];
 	int port[N];
-	fd_set read_set;
-	int read_num;
-	char c;
-	char str[MSG_LEN];
-	char send[MSG_LEN],rec[MSG_LEN];
+
+
+
+
 	int res_fd;
-	int r;
-    int listenfd ,connfd;
-    struct sockaddr_in addr; 
-	
-	queue list = NULL;
 
 
+	/*device is not connected to itself*/
 	devices[SELF] = -1;
 
+
+	/*Mandatory Initializations*/
 	init();
-
-	//timer_init();
-
-
-//############################ Reading Files
 	read_file("address.txt",address,port);
 
-//########################## SERVERS SET UP
 
 	get_server_fd(devices,SELF,address,port[SELF]);
 	get_client_fd(devices,SELF,address,port);
@@ -61,11 +61,8 @@ void main(int argc,char** argv)
 
 	while(1)
 	{
-		//scanf("%c",&c);
-		//r = rand()*1000/RAND_MAX;
-		//usleep(r*1000);
-		
-		printf("*************************************************\n");
+
+		/*Repeatedly trying to connect,access and disconnect */
 		
 		ra_lock(devices,SELF);
 		printf("Fetching Res ID\n");
@@ -75,18 +72,9 @@ void main(int argc,char** argv)
 		close(res_fd);
 		sleep(1);
 		ra_unlock(SELF);
-		lamport_time(0,CHANGE);
+		
 		
 		
 	}
-	/*ra_lock(devices);
-	res_fd = get_res_fd();
-	sprintf(str,"Msg from %d\n",SELF);
-	write(res_fd,str,strlen(str));
-	close(res_fd);
-	ra_unlock();*/
-	
-	scanf("%c",&c);
-
 
 }

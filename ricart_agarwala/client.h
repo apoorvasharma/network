@@ -1,8 +1,33 @@
-#include<stdio.h>
+/*
+Each device has a logical number (< N)
+For a TCP/IP connection it acts as a server for lower numbered devices
+and acts as a client to higher numbered devices
+Total connections = N*(N-1)/2
+Each device has (N-1) threads for communicating simultaneousy with other devices
+*/
+
+/*Header containing required functions */
+
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/types.h>
+#include <time.h> 
+#include <signal.h>
 #include"queue.h"
 #include<semaphore.h>
 
-#define N 3
+
+/* Nmmber of devices, known in advance and fixed*/
+#define N 4
+
+
 #define ADD_LEN 25
 #define MSG_LEN 100
 #define PORT 25000
@@ -17,9 +42,9 @@
 #define RECORD 0
 #define CHANGE 1
 
-//void* echo(void * data);
 
 
+/*Information to be passes to each communicating thread*/
 struct info
 {
 	int fd;
@@ -29,18 +54,8 @@ struct info
 };
 
 
-int strcnt(char *s,char c)
-{
-	int i;
-	int ans = 0;
-	for (i=0; s[i];i++) 
-	{
-		if(s[i] == c )
-			ans++;
-	}
-	return ans;
-}
 
+/*Global varibales and locks*/
 pthread_mutex_t timer_lock,state_lock,queue_lock,num_lock;
 sem_t res_sem;
 
@@ -51,22 +66,11 @@ queue pending_list = NULL;
 
 
 
-
-
-/*void timer(void* x)
-{
-	while(1)
-	{
-		pthread_mutex_lock(&timer_lock);
-		global_time ++ ;
-		//printf("signal %d\n",global_time);
-		pthread_mutex_unlock(&timer_lock);
-		//printf("beep\n");
-		usleep(USEC);
-	}	
-
-}*/
-
+/*
+Function to implement Lamports logical clock
+when action = CHANGE , records 't' if it is greater 
+when action = CHANGE , changes 'global_time'
+*/
 void lamport_time(int t,int action)
 {
 	static int msg_time = 0;
@@ -92,68 +96,54 @@ void lamport_time(int t,int action)
 	
 
 }
+
+/*
+Increments time
+Called during significant event ( sending message )
+
+*/
 void inc_time()
 {
 
 	pthread_mutex_lock(&timer_lock);
 	global_time++;
-
 	pthread_mutex_unlock(&timer_lock);
 
 }
+
+/*
+Return the time, adjusted for priority
+Done so that no 2 deviced share the same time stamp
+*/
 int get_time(int self)
 {
 	int t;
 	pthread_mutex_lock(&timer_lock);
 	t = global_time;
-	//printf("self = %d,time = %d,total = %d\n",self,global_time,t*10 + self);
 	pthread_mutex_unlock(&timer_lock);
 	return (t*10 + self);
-	//return 0;
-}
-/*
-int get_msg_time(char msg[MSG_LEN])
-{
-	char copy[MSG_LEN];
-	strcpy(copy,msg);
-	return atoi(strtok(copy,":"));
+	
 }
 
-char* get_msg_text(char msg[MSG_LEN])
-{
-	char copy[MSG_LEN];
-	strcpy(copy,msg);
-	strtok(copy,":");
-	return strtok(NULL,":");
-}
-*/
 
 
 void init()
 {
 	
-//########################### Setting Alarm
-	
-	
-	//lamport_time(1000);
-//########################### Setting Mutex
+
 	pthread_mutex_init(&timer_lock, NULL);
 	pthread_mutex_init(&state_lock, NULL);
 	pthread_mutex_init(&queue_lock, NULL);
 	pthread_mutex_init(&num_lock, NULL);
-//############################## Semaphore Init
+
 	sem_init(&res_sem,0,0);
-//################### starting timer
+
 	
 	
 }
 
-/*void timer_init()
-{
-	static pthread_t t;
-	//pthread_create(&t, NULL,timer, NULL);
-}*/
 
+/*Parse addresses and port numbers*/
 
 char  read_file(char* name,char addrs[N][ADD_LEN] ,int ports[N])
 {
@@ -173,6 +163,11 @@ char  read_file(char* name,char addrs[N][ADD_LEN] ,int ports[N])
 	fclose(file);
 }
 
+
+/*
+Wait for connections from lower numbered devices serially and put
+file descriptors in 'fd'
+*/
 void get_server_fd(int fd[N],int num,char addrs[N][ADD_LEN] ,int port)
 {
 
@@ -205,6 +200,12 @@ void get_server_fd(int fd[N],int num,char addrs[N][ADD_LEN] ,int port)
 	printf("Server Setup done\n");
 }
 
+
+
+/*
+Serially Connect to higher numbered Devices, keep retrying if not avaialable,
+add file descriptors in 'fd'
+*/
 void get_client_fd(int fd[N],int num,char addrs[N][ADD_LEN] ,int port[N])
 {
 
@@ -256,7 +257,10 @@ void get_client_fd(int fd[N],int num,char addrs[N][ADD_LEN] ,int port[N])
 }
 
 
-
+/*
+Send a message with time-stamp
+message length is fixed
+*/
 void send_msg(int fd, char * str,int self)
 {
 	int t;
@@ -264,11 +268,13 @@ void send_msg(int fd, char * str,int self)
 	char send[MSG_LEN];
 
 	sprintf(send,"%06d %s ",t,str);
-	printf("********* Sending - %06d %s \n",t,str);
+	//printf("********* Sending - %06d %s \n",t,str);
 	write(fd,send,strlen(send));
 }
 
-
+/*
+Send to all devices in 'fd' array
+*/
 void send_to_all(int*fd,char * msg,int self)
 {
 	int i;
@@ -285,6 +291,17 @@ void send_to_all(int*fd,char * msg,int self)
 	inc_time();
 }
 
+
+/*
+Function which each of the (N-1) threads run
+each thread gets data through struct info, which containt own logical number,
+file descriptor, and connected device number
+
+The Function is in an infinite loop to respond to messages accoring to Ricart-
+Agarwala Algorithm, comparing timestamps
+
+Comment out all the printfs to get detailed runtime output
+*/
 void* echo(void * data)
 {
 
@@ -307,10 +324,7 @@ void* echo(void * data)
 		
 		
 
-		
-		
-
-		printf("********Raw Message - %s\n",rec);
+		//printf("********Raw Message - %s\n",rec);
 
 	
 
@@ -322,6 +336,11 @@ void* echo(void * data)
 		offset = 0;
 		pthread_mutex_lock(&state_lock);
 		pthread_mutex_lock(&queue_lock);
+
+		/*
+		Message Queue might contain more than one arrived messages
+		below loop examines all of them
+		*/
 		while(sscanf(&rec[offset],"%d %s",&msg_time,&text) != EOF)
 		{
 
@@ -344,14 +363,14 @@ void* echo(void * data)
 					if(msg_time < my_time)
 					{
 						send_msg(my_info->fd,ACK,my_info->self);
-						printf("LESS PREF - Sending ACK to %d\n",my_info->num);
+						//printf("LESS PREF - Sending ACK to %d\n",my_info->num);
 						//printf("MT - %d , OT - %d\n",my_time,msg_time);
 					}
 					else
 					{
 				
 						pending_list = insert(pending_list,my_info->fd);	
-						printf("MORE PREF - Deferring to %d\n",my_info->num);
+						//printf("MORE PREF - Deferring to %d\n",my_info->num);
 					}
 				}
 				else if (global_state == HAVE )
@@ -367,22 +386,31 @@ void* echo(void * data)
 			{
 				pthread_mutex_lock(&num_lock);
 				global_ack++;
-				printf("ACK Number = %d\n",global_ack);
+				//printf("ACK Number = %d\n",global_ack);
 
 				if( global_ack == (N-1) )
 				{
 					printf("Acquiring \n");
 					global_state = HAVE;
+
+					/*so that ra_lock can proceed */
 					sem_post(&res_sem);
+
 
 				}
 				pthread_mutex_unlock(&num_lock);
+
+				/*
+				time is only recorded and not updated
+				This is done so that all the messages in a single locking 
+				cycle contain the same time stamp
+				*/
 				lamport_time(msg_time,RECORD);
 		
 			}
 			offset = offset + 11;
 			
-			//inc_time();
+
 			
 		}
 
@@ -397,7 +425,9 @@ void* echo(void * data)
 	}
 }
 
-
+/*
+Start threads for all other devices
+*/
 void start_comm_threads(int fds[N],int self)
 {
 	int i;
@@ -419,7 +449,9 @@ void start_comm_threads(int fds[N],int self)
 	}
 }
 
-
+/*
+Connect and get critical resource's file descriptor
+*/
 int get_res_fd()
 {
 	
@@ -453,6 +485,13 @@ int get_res_fd()
 		
 }
 
+
+/*
+Function to acquire lock on resource
+It send requests to all devices and waits due to semaphore 'res_sem'
+The semaphore is incremented by 'echo' function when required ACKs are
+receieved
+*/
 ra_lock(int* fds,int self)
 {
 
@@ -491,7 +530,10 @@ ra_lock(int* fds,int self)
 */
 	printf("Locked\n");
 }
-		
+
+/*
+Unlock the resource
+*/
 ra_unlock(int self)
 {
 	int x;
@@ -518,7 +560,7 @@ ra_unlock(int self)
 
 	pthread_mutex_unlock(&num_lock);
 
-
-	//sem_wait(&res_sem);
+	/*Change time according to all messages received since last change */
+	lamport_time(0,CHANGE);
 }
 
