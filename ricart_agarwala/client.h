@@ -70,6 +70,8 @@ queue pending_list = NULL;
 Function to implement Lamports logical clock
 when action = CHANGE , records 't' if it is greater 
 when action = CHANGE , changes 'global_time'
+
+Change this function for more than 10 devices
 */
 void lamport_time(int t,int action)
 {
@@ -502,32 +504,12 @@ ra_lock(int* fds,int self)
 	pthread_mutex_unlock(&state_lock);
 	send_to_all(fds,REQ,self);
 
+
+	/*wait till all ACKs arrive */
 	sem_wait(&res_sem);
 	
 	
-	/*
-	int i;
-	char rec[MSG_LEN];
-	char text[MSG_LEN];
 
-
-	
-	for(i=0;i<N-1;i++)
-	{
-		if(fds[i] != -1 )
-		{
-			while(1)
-			{
-				read(fds[i],rec,MSG_LEN);
-				strcpy(text,get_msg_text(rec));
-				if( strcmp(text,ACK) == 0 )
-				{
-					printf("Received ACK from %d\n",i);
-				}
-			}	
-		}
-	}
-*/
 	printf("Locked\n");
 }
 
