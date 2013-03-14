@@ -1,3 +1,26 @@
+
+/*
+    This file is part of "Ricart Agarwala C Code".
+
+    "Ricart Agarwala C Code" is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    "Ricart Agarwala C Code" is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+
+
+
+*/
+
+
+
 /*
 Client Program
 Gets own device number through commandline and accesses resourced through 
@@ -37,7 +60,7 @@ void main(int argc,char** argv)
 	/*arrays to hold addresses and port numbers of other devices*/
 	char address[N][ADD_LEN];
 	int port[N];
-
+	char c;
 
 
 
@@ -63,16 +86,16 @@ void main(int argc,char** argv)
 	{
 
 		/*Repeatedly trying to connect,access and disconnect */
-		
+		scanf("%c",&c);
 		ra_lock(devices,SELF);
 		printf("Fetching Res ID\n");
 		res_fd = get_res_fd();
 		sprintf(str,"Msg from %d\n",SELF);
 		write(res_fd,str,strlen(str));
 		close(res_fd);
-		sleep(1);
-		ra_unlock(SELF);
 		
+		ra_unlock(SELF);
+		usleep(500000);
 		
 		
 	}
